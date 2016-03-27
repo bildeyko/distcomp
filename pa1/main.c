@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <string.h>
+#include <wait.h>
 
 #include "ipc.h"
 #include "common.h"
@@ -24,8 +25,11 @@ struct dataIO_t
 {
 	int processes;
 	int8_t lid;
-	struct pipes_t pipes[MAX_PROCESS_ID+1][MAX_PROCESS_ID+1];
+	struct pipes_t pipes[MAX_PROCESS_ID][MAX_PROCESS_ID];
 };
+
+void usage();
+int closeUnusedPipes(void * self);
 
 int main(int argc, char *argv[])
 {
@@ -33,8 +37,31 @@ int main(int argc, char *argv[])
 	struct dataIO_t data;
 	int start_msgs, done_msgs;
 
-	processes = atoi(argv[1])+1;
+	if(argc < 2)
+		usage();
+
+	int c;
+	opterr=0;
+	while((c = getopt(argc, argv, "p:")) != -1) {
+		switch (c) {
+			case 'p':
+				processes = atoi(optarg)+1;
+				break;
+			case '?':
+			default:
+				usage();
+		}
+	}	
+	
 	data.processes = processes;
+	data.lid = 0;
+
+	FILE *fd_pipes;
+
+	if ((fd_pipes = fopen(pipes_log, "w")) == NULL) {
+		printf("Error with file");
+		exit(1);
+	}	
 
 	for(int i = 0; i < processes; i++) {		
 		for(int j = 0; j < processes; j++) {
@@ -45,19 +72,27 @@ int main(int argc, char *argv[])
 			else {
 				if(pipe(data.pipes[i][j].rdwr) < 0)
 					printf("Error with pipe");
+
 				int mode = fcntl(data.pipes[i][j].rdwr[0], F_GETFL);
 				fcntl(data.pipes[i][j].rdwr[0], F_SETFL, mode | O_NONBLOCK);
-			}
 
-			//printf("Pipe (%d): %d\n", i, data.pipes[i][j].rdwr[0]);
+				fprintf(fd_pipes, "The pipe %d ===> %d was created\n", j, i);
+			}
 		}
 	}
 
-	//send(&data, 123, NULL);
+	fclose(fd_pipes);
 
 	Message msg, resMsg;
 	msg.s_header.s_magic = MESSAGE_MAGIC;
 	msg.s_header.s_local_time = 0;
+
+	FILE *fd_events;
+
+	if ((fd_events = fopen(events_log, "a")) == NULL) {
+		printf("Error with file");
+		exit(1);
+	}	
 
 	for(int i = 1; i < processes; i++) {
 		pid = fork();
@@ -66,17 +101,16 @@ int main(int argc, char *argv[])
 			printf("Error");
 			exit(1);
 		} else if (pid == 0) {
-			FILE *fd_events;
+			
 			start_msgs = data.processes - 2;
 			done_msgs = data.processes - 2;
 
 			data.lid = i;
 
-			if ((fd_events = fopen(events_log, "a")) == NULL) {
-				printf("Error with file");
-       			exit(1);
-			}			
+			closeUnusedPipes(&data);
+		
 			fprintf(fd_events, log_started_fmt, data.lid, getpid(), getppid());
+			fflush(fd_events);
 			printf(log_started_fmt, data.lid, getpid(), getppid());
 // close unused pipes!
 			
@@ -85,32 +119,45 @@ int main(int argc, char *argv[])
 			msg.s_header.s_payload_len = strlen(msg.s_payload);
 			send_multicast(&data, &msg);
 
-			while(start_msgs) {
-				
+			while(start_msgs) {				
 				if(receive_any(&data, &resMsg) == 0) {
 					if(resMsg.s_header.s_type == STARTED)
-					{
 						start_msgs--;
-						//printf("%d start_msgs %d\n", data.lid, start_msgs);
-					}
 					if(resMsg.s_header.s_type == DONE)
 						done_msgs--;
 				}
 			}
 
 			fprintf(fd_events, log_received_all_started_fmt, data.lid);
+			fflush(fd_events);
 			printf(log_received_all_started_fmt, data.lid);
 
+			fprintf(fd_events, log_done_fmt, data.lid);
+			fflush(fd_events);
+			printf(log_done_fmt, data.lid);			
+
+			msg.s_header.s_type = DONE;
+			sprintf(msg.s_payload, log_done_fmt, data.lid);
+			msg.s_header.s_payload_len = strlen(msg.s_payload);
+			send_multicast(&data, &msg);
+
+			while(done_msgs) {				
+				if(receive_any(&data, &resMsg) == 0) {
+					if(resMsg.s_header.s_type == DONE)
+						done_msgs--;
+				}
+			}
+
+			fprintf(fd_events, log_received_all_done_fmt, data.lid);
+			fflush(fd_events);
+			printf(log_received_all_done_fmt, data.lid);
+
+			fclose(fd_events);
 			exit(0); 
 		}
 	}
 
-	//write(pipes[1][1], "Hello world\n", 12);
-	//write(pipes[3][1], "Hello world\n", 12);
-	/*nbytes = read(pipes[0][0], buf, BSIZE);
-	printf("Msg (%d): %s\n", 0, buf);*/
-
-	//receive(&data, 2, NULL);
+	closeUnusedPipes(&data);
 
 	start_msgs = data.processes - 1;
 	done_msgs = data.processes - 1;
@@ -118,30 +165,48 @@ int main(int argc, char *argv[])
 	while(start_msgs) {				
 		if(receive_any(&data, &resMsg) == 0) {
 			if(resMsg.s_header.s_type == STARTED)
-			{
 				start_msgs--;
-				//printf("%d start_msgs %d\n", data.lid, start_msgs);
-			}
 			if(resMsg.s_header.s_type == DONE)
 				done_msgs--;
 		}
-	}	
+	}
+
+	fprintf(fd_events, log_received_all_started_fmt, data.lid);
+	fflush(fd_events);
+	printf(log_received_all_started_fmt, data.lid);
+
+	while(done_msgs) {				
+		if(receive_any(&data, &resMsg) == 0) {
+			if(resMsg.s_header.s_type == DONE)
+				done_msgs--;
+		}
+	}
+
+	fprintf(fd_events, log_received_all_done_fmt, data.lid);
+	fflush(fd_events);
+	printf(log_received_all_done_fmt, data.lid);		
+
+	fclose(fd_events);
 
 	for(int i = 0; i < data.processes; i++) {
-		wait(i);
+		wait(&i);
 	}	
+
+	return 0;
 }
 
 int send(void * self, local_id dst, const Message * msg) {
 	struct dataIO_t* data = self;
-	//printf("Msg: %s\n", &msg->s_payload);
-	if(write(data->pipes[dst][data->lid].rdwr[1], msg, sizeof(msg->s_header) + msg->s_header.s_payload_len) != sizeof(msg->s_header) + msg->s_header.s_payload_len)
+	uint16_t size = sizeof(msg->s_header) + msg->s_header.s_payload_len;
+
+	if(write(data->pipes[dst][data->lid].rdwr[1], msg, size) != size)
 		return 1;
 	return 0;
 }
 
 int send_multicast(void * self, const Message * msg) {
 	struct dataIO_t* data = self;
+
 	for(int i = 0; i < data->processes; i++) {
 		if(i == data->lid)
 			continue;
@@ -153,25 +218,21 @@ int send_multicast(void * self, const Message * msg) {
 
 int receive(void * self, local_id from, Message * msg) {
 	struct dataIO_t* data = self;
+	uint16_t size = sizeof(msg->s_header);
 
-	if(read(data->pipes[data->lid][from].rdwr[0], &msg->s_header, sizeof(msg->s_header)) != sizeof(msg->s_header)) {
+	if(read(data->pipes[data->lid][from].rdwr[0], &msg->s_header, size) != size)
 		return -1;
-	}
-	if(read(data->pipes[data->lid][from].rdwr[0], &msg->s_payload, msg->s_header.s_payload_len) != msg->s_header.s_payload_len) {
+
+	size = msg->s_header.s_payload_len;
+
+	if(read(data->pipes[data->lid][from].rdwr[0], &msg->s_payload, size) != size)
 		return -1;
-	}
-	printf("%d received %s from %d\n", data->lid, msg->s_header.s_type == STARTED ? "STARTED" : "DONE", from);
+
 	return 0;
 }
 
 int receive_any(void * self, Message * msg) {
 	struct dataIO_t* data = self;
-
-	/*for(int i = 0; i < data->processes; i++)
-		if(i != data->lid)
-			if (dup2(data->pipes[data->lid][i].rdwr[0], fd[0]) == -1)
-				return 1;*/
-
 
 	for(int i = 0; i < data->processes; i++) {
 		if(i == data->lid)
@@ -182,7 +243,7 @@ int receive_any(void * self, Message * msg) {
 
 	struct timespec tmr;
 	tmr.tv_sec = 0;
-	tmr.tv_nsec = 10000000;
+	tmr.tv_nsec = 50000000;
 
 	if(nanosleep(&tmr, NULL) < 0 )   
 	{
@@ -191,4 +252,22 @@ int receive_any(void * self, Message * msg) {
 	}
 
 	return 1;
+}
+
+int closeUnusedPipes(void * self)
+{
+	struct dataIO_t* data = self;
+	for(int i = 0; i < data->processes; i++) {		
+		if(i == data->lid)
+			continue;
+		close(data->pipes[data->lid][i].rdwr[1]);
+		close(data->pipes[i][data->lid].rdwr[0]);
+	}
+	return 0;
+}
+
+void usage()
+{
+	printf("usage: pa1 -p num\n");
+	exit(1);
 }

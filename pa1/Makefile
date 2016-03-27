@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -g -std=c99 -Wall --pedantic
+CFLAGS = -std=c99 -Wall --pedantic
 LFLAGS = 
 TARGET = pa1
 
@@ -12,4 +12,4 @@ main.o: main.c
 	$(CC) -c $(CFLAGS) main.c
 
 clean:
-	rm -rf *.o $(TARGET)
+	rm -rf *.o $(TARGET) *.log
