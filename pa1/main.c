@@ -36,6 +36,7 @@ int main(int argc, char *argv[])
 	int pid;
 	struct dataIO_t data;
 	int start_msgs, done_msgs;
+	FILE *fd_pipes, *fd_events;
 
 	if(argc < 2)
 		usage();
@@ -55,10 +56,8 @@ int main(int argc, char *argv[])
 	
 	data.lid = 0;
 
-	FILE *fd_pipes;
-
 	if ((fd_pipes = fopen(pipes_log, "w")) == NULL) {
-		printf("Error with file");
+		fprintf(stderr, "Error opening the file %s\n", pipes_log);
 		exit(1);
 	}	
 
@@ -69,8 +68,10 @@ int main(int argc, char *argv[])
 				data.pipes[i][j].rdwr[1] = -1;
 			}
 			else {
-				if(pipe(data.pipes[i][j].rdwr) < 0)
-					printf("Error with pipe");
+				if(pipe(data.pipes[i][j].rdwr) < 0) {
+					fprintf(stderr, "Error creating the pipe\n");
+					exit(1);
+				}
 
 				int mode = fcntl(data.pipes[i][j].rdwr[0], F_GETFL);
 				fcntl(data.pipes[i][j].rdwr[0], F_SETFL, mode | O_NONBLOCK);
@@ -86,10 +87,8 @@ int main(int argc, char *argv[])
 	msg.s_header.s_magic = MESSAGE_MAGIC;
 	msg.s_header.s_local_time = 0;
 
-	FILE *fd_events;
-
 	if ((fd_events = fopen(events_log, "a")) == NULL) {
-		printf("Error with file");
+		fprintf(stderr, "Error opening the file %s\n", events_log);
 		exit(1);
 	}	
 
@@ -97,7 +96,7 @@ int main(int argc, char *argv[])
 		pid = fork();
 
 		if(pid < 0) {
-			printf("Error");
+			fprintf(stderr, "Error creating the child\n");
 			exit(1);
 		} else if (pid == 0) {
 			
