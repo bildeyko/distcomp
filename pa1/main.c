@@ -18,7 +18,7 @@
 
 struct pipes_t
 {
-   int rdwr[2];  // 0 = read, 1 = write
+   int rdwr[2]; // 0 = read, 1 = write
 };
 
 struct dataIO_t
@@ -33,7 +33,7 @@ int closeUnusedPipes(void * self);
 
 int main(int argc, char *argv[])
 {
-	int pid, processes;
+	int pid;
 	struct dataIO_t data;
 	int start_msgs, done_msgs;
 
@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 	while((c = getopt(argc, argv, "p:")) != -1) {
 		switch (c) {
 			case 'p':
-				processes = atoi(optarg)+1;
+				data.processes = atoi(optarg)+1;
 				break;
 			case '?':
 			default:
@@ -53,7 +53,6 @@ int main(int argc, char *argv[])
 		}
 	}	
 	
-	data.processes = processes;
 	data.lid = 0;
 
 	FILE *fd_pipes;
@@ -63,8 +62,8 @@ int main(int argc, char *argv[])
 		exit(1);
 	}	
 
-	for(int i = 0; i < processes; i++) {		
-		for(int j = 0; j < processes; j++) {
+	for(int i = 0; i < data.processes; i++) {		
+		for(int j = 0; j < data.processes; j++) {
 			if(j==i) {
 				data.pipes[i][j].rdwr[0] = -1;
 				data.pipes[i][j].rdwr[1] = -1;
@@ -94,7 +93,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}	
 
-	for(int i = 1; i < processes; i++) {
+	for(int i = 1; i < data.processes; i++) {
 		pid = fork();
 
 		if(pid < 0) {
@@ -112,7 +111,6 @@ int main(int argc, char *argv[])
 			fprintf(fd_events, log_started_fmt, data.lid, getpid(), getppid());
 			fflush(fd_events);
 			printf(log_started_fmt, data.lid, getpid(), getppid());
-// close unused pipes!
 			
 			msg.s_header.s_type = STARTED;
 			sprintf(msg.s_payload, log_started_fmt, data.lid, getpid(), getppid());
@@ -257,11 +255,22 @@ int receive_any(void * self, Message * msg) {
 int closeUnusedPipes(void * self)
 {
 	struct dataIO_t* data = self;
-	for(int i = 0; i < data->processes; i++) {		
-		if(i == data->lid)
-			continue;
-		close(data->pipes[data->lid][i].rdwr[1]);
-		close(data->pipes[i][data->lid].rdwr[0]);
+	for(int i = 0; i < data->processes; i++) {
+
+		for(int j = 0; j < data->processes; j++) {	
+			if(i == j)
+				continue;	
+			if(i == data->lid) {
+				close(data->pipes[data->lid][j].rdwr[1]);
+				continue;	
+			}
+			if(i != data->lid && j != data->lid) {
+				close(data->pipes[i][j].rdwr[1]);
+				close(data->pipes[i][j].rdwr[0]);
+				continue;
+			}
+			close(data->pipes[i][j].rdwr[0]);
+		}
 	}
 	return 0;
 }
