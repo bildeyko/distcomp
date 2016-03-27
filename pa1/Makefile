@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -std=c99 -Wall --pedantic
+CFLAGS = -g -std=c99 -Wall --pedantic
 LFLAGS = 
 TARGET = pa1
 

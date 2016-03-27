@@ -1,0 +1,88 @@
+Process 2 (pid 13394, parent 13392) has STARTED
+Process 1 (pid 13393, parent 13392) has STARTED
+Process 3 (pid 13395, parent 13392) has STARTED
+Process 1 (pid 13531, parent 13526) has STARTED
+Process 2 (pid 13532, parent 13526) has STARTED
+Process 3 (pid 13533, parent 13526) has STARTED
+Process 1 (pid 13538, parent 13537) has STARTED
+Process 2 (pid 13539, parent 13537) has STARTED
+Process 3 (pid 13540, parent 13537) has STARTED
+Process 3 (pid 13571, parent 13568) has STARTED
+Process 2 (pid 13570, parent 13568) has STARTED
+Process 1 (pid 13569, parent 13568) has STARTED
+Process 3 (pid 13605, parent 13602) has STARTED
+Process 2 (pid 13604, parent 13602) has STARTED
+Process 1 (pid 13603, parent 13602) has STARTED
+Process 2 (pid 13633, parent 13631) has STARTED
+Process 3 (pid 13634, parent 13631) has STARTED
+Process 1 (pid 13632, parent 13631) has STARTED
+Process 3 (pid 13659, parent 13656) has STARTED
+Process 1 (pid 13657, parent 13656) has STARTED
+Process 2 (pid 13658, parent 13656) has STARTED
+Process 3 (pid 13691, parent 13688) has STARTED
+Process 2 (pid 13690, parent 13688) has STARTED
+Process 1 (pid 13689, parent     1) has STARTED
+Process 1 (pid 13721, parent 13720) has STARTED
+Process 2 (pid 13722, parent 13720) has STARTED
+Process 3 (pid 13723, parent 13720) has STARTED
+Process 1 (pid 13732, parent 13731) has STARTED
+Process 3 (pid 13734, parent 13731) has STARTED
+Process 2 (pid 13733, parent 13731) has STARTED
+Process 3 (pid 13745, parent 13742) has STARTED
+Process 2 (pid 13744, parent 13742) has STARTED
+Process 1 (pid 13743, parent 13742) has STARTED
+Process 2 (pid 13756, parent 13754) has STARTED
+Process 1 (pid 13755, parent 13754) has STARTED
+Process 3 (pid 13757, parent 13754) has STARTED
+Process 1 (pid 13767, parent 13766) has STARTED
+Process 3 (pid 13769, parent 13766) has STARTED
+Process 2 (pid 13768, parent 13766) has STARTED
+Process 3 (pid 13780, parent 13777) has STARTED
+Process 2 (pid 13779, parent 13777) has STARTED
+Process 1 (pid 13778, parent 13777) has STARTED
+Process 2 (pid 13791, parent 13789) has STARTED
+Process 3 (pid 13792, parent 13789) has STARTED
+Process 1 (pid 13790, parent 13789) has STARTED
+Process 1 (pid 13803, parent 13802) has STARTED
+Process 3 (pid 13805, parent 13802) has STARTED
+Process 2 (pid 13804, parent 13802) has STARTED
+Process 1 (pid 13814, parent 13813) has STARTED
+Process 3 (pid 13816, parent 13813) has STARTED
+Process 2 (pid 13815, parent 13813) has STARTED
+Process 3 (pid 13828, parent 13825) has STARTED
+Process 2 (pid 13827, parent 13825) has STARTED
+Process 1 (pid 13826, parent 13825) has STARTED
+Process 3 (pid 13839, parent 13836) has STARTED
+Process 2 (pid 13838, parent 13836) has STARTED
+Process 1 (pid 13837, parent 13836) has STARTED
+Process 1 (pid 13863, parent 13862) has STARTED
+Process 3 (pid 13865, parent 13862) has STARTED
+Process 2 (pid 13864, parent 13862) has STARTED
+Process 3 (pid 13877, parent 13874) has STARTED
+Process 2 (pid 13876, parent 13874) has STARTED
+Process 1 (pid 13875, parent 13874) has STARTED
+Process 3 (pid 13888, parent 13885) has STARTED
+Process 2 (pid 13887, parent 13885) has STARTED
+Process 1 (pid 13886, parent 13885) has STARTED
+Process 1 (pid 14320, parent 14319) has STARTED
+Process 1 received all STARTED messages
+Process 1 (pid 14347, parent 14346) has STARTED
+Process 1 received all STARTED messages
+Process 1 (pid 14374, parent 14373) has STARTED
+Process 1 received all STARTED messages
+Process 1 (pid 14391, parent 14390) has STARTED
+Process 1 received all STARTED messages
+Process 1 (pid 14410, parent 14409) has STARTED
+Process 1 received all STARTED messages
+Process 1 (pid 14455, parent 14454) has STARTED
+Process 1 received all STARTED messages
+Process 3 (pid 14457, parent 14454) has STARTED
+Process 3 received all STARTED messages
+Process 2 (pid 14456, parent 14454) has STARTED
+Process 2 received all STARTED messages
+Process 3 (pid 14526, parent 14523) has STARTED
+Process 3 received all STARTED messages
+Process 1 (pid 14524, parent 14523) has STARTED
+Process 1 received all STARTED messages
+Process 2 (pid 14525, parent 14523) has STARTED
+Process 2 received all STARTED messages
