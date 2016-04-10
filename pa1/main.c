@@ -8,25 +8,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <time.h>
 #include <string.h>
 #include <wait.h>
 
 #include "ipc.h"
 #include "common.h"
 #include "pa1.h"
+#include "main.h"
 
-struct pipes_t
-{
-   int rdwr[2]; // 0 = read, 1 = write
-};
-
-struct dataIO_t
-{
-	int processes;
-	int8_t lid;
-	struct pipes_t pipes[MAX_PROCESS_ID][MAX_PROCESS_ID];
-};
 
 void usage();
 int closeUnusedPipes(void * self);
@@ -190,65 +179,6 @@ int main(int argc, char *argv[])
 	}	
 
 	return 0;
-}
-
-int send(void * self, local_id dst, const Message * msg) {
-	struct dataIO_t* data = self;
-	uint16_t size = sizeof(msg->s_header) + msg->s_header.s_payload_len;
-
-	if(write(data->pipes[dst][data->lid].rdwr[1], msg, size) != size)
-		return 1;
-	return 0;
-}
-
-int send_multicast(void * self, const Message * msg) {
-	struct dataIO_t* data = self;
-
-	for(int i = 0; i < data->processes; i++) {
-		if(i == data->lid)
-			continue;
-		if(send(self, i, msg) != 0)
-			return 1;
-	}
-	return 0;
-}
-
-int receive(void * self, local_id from, Message * msg) {
-	struct dataIO_t* data = self;
-	uint16_t size = sizeof(msg->s_header);
-
-	if(read(data->pipes[data->lid][from].rdwr[0], &msg->s_header, size) != size)
-		return -1;
-
-	size = msg->s_header.s_payload_len;
-
-	if(read(data->pipes[data->lid][from].rdwr[0], &msg->s_payload, size) != size)
-		return -1;
-
-	return 0;
-}
-
-int receive_any(void * self, Message * msg) {
-	struct dataIO_t* data = self;
-
-	for(int i = 0; i < data->processes; i++) {
-		if(i == data->lid)
-			continue;
-		if(receive(self, i, msg) == 0)
-			return 0;
-	}
-
-	struct timespec tmr;
-	tmr.tv_sec = 0;
-	tmr.tv_nsec = 50000000;
-
-	if(nanosleep(&tmr, NULL) < 0 )   
-	{
-		printf("Nano sleep system call failed \n");
-		return -1;
-	}
-
-	return 1;
 }
 
 int closeUnusedPipes(void * self)
