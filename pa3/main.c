@@ -23,6 +23,21 @@ void usage();
 int closeUnusedPipes(void *);
 void doChild(void *, FILE *, int, int);
 
+static timestamp_t lamportStamp = 0;
+
+timestamp_t get_lamport_time()
+{
+	return ++lamportStamp;
+}
+
+timestamp_t max(timestamp_t a, timestamp_t b)
+{
+	if (a>b)
+		return a;
+	else
+		return b;
+}
+
 int main(int argc, char *argv[])
 {
 	int pid;
@@ -104,20 +119,24 @@ int main(int argc, char *argv[])
 
 	closeUnusedPipes(&data);
 
-	timestamp_t tm = get_physical_time();
+	timestamp_t tm = get_lamport_time();
 	start_msgs = data.processes - 1;
 	done_msgs = data.processes - 1;
 
 	while(start_msgs) {				
 		if(receive_any(&data, &resMsg) == 0) {
 			if(resMsg.s_header.s_type == STARTED)
+			{
 				start_msgs--;
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+			}
 			if(resMsg.s_header.s_type == DONE)
 				done_msgs--;
 		}
 	}
 
-	tm = get_physical_time();
+	
 
 	fprintf(fd_events, log_received_all_started_fmt, tm, data.lid);
 	fflush(fd_events);
@@ -125,18 +144,21 @@ int main(int argc, char *argv[])
 
 	bank_robbery(&data,data.processes-1);
 
+	tm = get_lamport_time();
 	msg.s_header.s_type = STOP;
 	msg.s_header.s_payload_len = 0;
+	msg.s_header.s_local_time = tm;
 	send_multicast(&data, &msg);
 
 	while(done_msgs) {				
 		if(receive_any(&data, &resMsg) == 0) {
-			if(resMsg.s_header.s_type == DONE)
+			if(resMsg.s_header.s_type == DONE) {
 				done_msgs--;
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+			}
 		}
 	}
-
-	tm = get_physical_time();
 
 	fprintf(fd_events, log_received_all_done_fmt, tm, data.lid);
 	fflush(fd_events);
@@ -155,6 +177,9 @@ int main(int argc, char *argv[])
 			{	
 				allHistory.s_history[hist.s_id-1] = hist;
 				history_msgs--;
+
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
 			}
 		}
 	} while(history_msgs);
@@ -182,13 +207,14 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 	history.s_id = lid;
 	history.s_history_len = 0;		
 
-	timestamp_t tm = get_physical_time();
+	timestamp_t tm = lamportStamp;
+	timestamp_t lastHistoryTime = tm;
 
 	balance_t childBalance = initBalance;
 
 	history.s_history[history.s_history_len].s_balance = childBalance;
 	history.s_history[history.s_history_len].s_time = tm;
-	history.s_history[history.s_history_len].s_balance_pending_in = 0;			
+	history.s_history[history.s_history_len].s_balance_pending_in = 0;		
 
 	closeUnusedPipes(data);
 
@@ -198,36 +224,40 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 	printf(log_started_fmt, tm, history.s_id, getpid(), getppid(), 
 		   history.s_history[history.s_history_len].s_balance);
 	
+	tm = get_lamport_time();
 	msg.s_header.s_type = STARTED;
 	msg.s_header.s_magic = MESSAGE_MAGIC;
 	sprintf(msg.s_payload, log_started_fmt, tm, history.s_id, getpid(), 
 			getppid(), history.s_history[history.s_history_len].s_balance);
 	msg.s_header.s_payload_len = strlen(msg.s_payload);
+	msg.s_header.s_local_time = tm;
 	send(data, 0, &msg);
 
 	history.s_history_len ++;
 
+	history.s_history[history.s_history_len].s_balance = childBalance;
+	history.s_history[history.s_history_len].s_time = tm;
+	history.s_history[history.s_history_len].s_balance_pending_in = 0;
+
+	history.s_history_len ++;
+
 	while(1 && done_msgs) {
-		tm = get_physical_time();
-
-		/*
-			Set balance for empty timestamps
-		*/	
-		BalanceState balance;
-		balance.s_balance_pending_in = 0;
-		balance.s_balance = childBalance;
-		balance.s_time = get_physical_time();
-		history.s_history[history.s_history_len] = balance;
-		history.s_history_len ++;
-
 		if(receive_any(data, &resMsg) == 0) {
 			if(resMsg.s_header.s_type == DONE) {
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+
 				done_msgs--;	
 			}
 			if(resMsg.s_header.s_type == STOP) {
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+
+				tm = get_lamport_time();
 				msg.s_header.s_type = DONE;
 				sprintf(msg.s_payload, log_done_fmt, tm, data->lid, childBalance);
 				msg.s_header.s_payload_len = strlen(msg.s_payload);
+				msg.s_header.s_local_time = tm;
 				send_multicast(data, &msg);
 
 				fprintf(fd_events, log_done_fmt, tm, data->lid, childBalance);
@@ -235,10 +265,40 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 				printf(log_done_fmt, tm, data->lid, childBalance);
 			}
 			if(resMsg.s_header.s_type == TRANSFER) {
+				if(resMsg.s_header.s_local_time > lastHistoryTime)
+				{
+					timestamp_t buf = lastHistoryTime + 1;
+					while(buf != resMsg.s_header.s_local_time + 1)
+					{						
+						BalanceState balance;
+						balance.s_balance_pending_in = 0;
+						balance.s_balance = childBalance;
+						balance.s_time = buf;
+						history.s_history[history.s_history_len] = balance;
+						history.s_history_len ++;
+
+						buf ++;
+					}
+				}
+
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+
 				TransferOrder order;
 				memcpy(&order, resMsg.s_payload, resMsg.s_header.s_payload_len);
 
 				if(order.s_src == data->lid) {
+					BalanceState balance;
+					balance.s_balance_pending_in = 0;
+					balance.s_balance = childBalance;
+					balance.s_time = tm;
+					history.s_history[history.s_history_len] = balance;
+					history.s_history_len ++;
+
+					tm = get_lamport_time();
+
+					resMsg.s_header.s_local_time = tm;
+
 					fprintf(fd_events, log_transfer_out_fmt, tm, data->lid, 
 							order.s_amount, order.s_dst);
 					fflush(fd_events);
@@ -248,12 +308,16 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 
 					childBalance -= order.s_amount;
 
-					BalanceState balance;
-					balance.s_balance_pending_in = 0;
+					balance.s_balance_pending_in = order.s_amount;
 					balance.s_balance = childBalance;
 					balance.s_time = tm;
 
-					history.s_history[history.s_history_len] = balance;
+					lastHistoryTime = tm;
+
+					history.s_history[history.s_history_len] = balance;					
+					history.s_history_len ++;
+
+					
 				}
 				if(order.s_dst == data->lid) {
 					fprintf(fd_events, log_transfer_in_fmt, tm, data->lid, 
@@ -262,15 +326,25 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 					printf(log_transfer_in_fmt, tm, data->lid, order.s_amount, 
 						   order.s_src);
 
-					childBalance += order.s_amount;
-
 					BalanceState balance;
 					balance.s_balance_pending_in = 0;
 					balance.s_balance = childBalance;
 					balance.s_time = tm;
-
 					history.s_history[history.s_history_len] = balance;
+					history.s_history_len ++;
 
+					childBalance += order.s_amount;
+
+					balance.s_balance_pending_in = 0;
+					balance.s_balance = childBalance;
+					balance.s_time = tm;
+
+					lastHistoryTime = tm;
+
+					history.s_history[history.s_history_len] = balance;					
+					history.s_history_len ++;
+
+					tm = get_lamport_time();
 					msg.s_header.s_type = ACK;
 					msg.s_header.s_magic = MESSAGE_MAGIC;
 					msg.s_header.s_local_time = tm;
@@ -281,14 +355,32 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 		}
 	}
 
+
+	if(resMsg.s_header.s_local_time >= lastHistoryTime)
+	{
+		timestamp_t buf = lastHistoryTime + 1;
+		while(buf != resMsg.s_header.s_local_time)
+		{			
+			BalanceState balance;
+			balance.s_balance_pending_in = 0;
+			balance.s_balance = childBalance;
+			balance.s_time = buf;
+			history.s_history[history.s_history_len] = balance;
+			history.s_history_len ++;
+
+			buf ++;
+		}
+	}
+
 	struct timespec tmr;
 	tmr.tv_sec = 0;
 	tmr.tv_nsec = 50000000;
 	nanosleep(&tmr, NULL);
 
+	tm = get_lamport_time();
 	msg.s_header.s_magic = MESSAGE_MAGIC;
 	msg.s_header.s_type = BALANCE_HISTORY;
-	msg.s_header.s_local_time = get_physical_time();
+	msg.s_header.s_local_time = tm;
 	msg.s_header.s_payload_len = sizeof(history);
 	memcpy(msg.s_payload, &history, sizeof(history));	
 
@@ -308,7 +400,7 @@ void transfer(void * parent_data, local_id src, local_id dst,
     Message msg, resMsg;
     msg.s_header.s_magic = MESSAGE_MAGIC;
 	msg.s_header.s_type = TRANSFER;
-	msg.s_header.s_local_time = get_physical_time();
+	msg.s_header.s_local_time = get_lamport_time();
 	msg.s_header.s_payload_len = sizeof(order);
 	memcpy(msg.s_payload, &order, sizeof(order));	
 
@@ -317,7 +409,11 @@ void transfer(void * parent_data, local_id src, local_id dst,
 	while(1) {			
 		if(receive(parent_data, dst, &resMsg) == 0) {
 			if(resMsg.s_header.s_type == ACK)
-				break;			
+			{
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				get_lamport_time();		
+				break;	
+			}
 		}
 	}
 }
