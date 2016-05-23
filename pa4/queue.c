@@ -17,14 +17,34 @@ void add_item(local_id pid, timestamp_t times)
 	else
 	{
 		item_t *current = queue.head;
-		while (current->next != NULL && current->times<times) {
+		item_t *prevItem;
+
+		if(current->times > times)
+		{
+			newItem->next = current;
+			queue.head = newItem;
+			queue.length ++;
+			return;
+		}
+
+		while (current->next != NULL && current->times < times) {
+			prevItem = current;
 			current = current->next;
 		}
 
-		if(current->next != NULL)
-			newItem->next = current->next;
-
-		current->next = newItem;
+		if(current->next != NULL){
+			newItem->next = current;
+			prevItem->next = newItem;
+		}
+		else
+		{
+			if(current->times < times)
+				current->next = newItem;
+			else {
+				newItem->next = current;
+				prevItem->next = newItem;
+			}
+		}
 	}
 
 	queue.length ++;
@@ -34,6 +54,14 @@ int delete_item(local_id pid)
 {
 	item_t *prevItem, *current;
 	current = queue.head;
+
+	if(current->pid == pid)
+	{
+		queue.head = current->next;
+		free(current);
+		queue.length --;
+		return 0;
+	}
 	
 	while (current->next != NULL && current->pid != pid) {
 		prevItem = current;
@@ -49,6 +77,7 @@ int delete_item(local_id pid)
 		prevItem->next = current->next;
 
 	free(current);
+	queue.length --;
 	return 0;
 }
 
@@ -57,7 +86,7 @@ item_t *get_head()
 	return queue.head;
 }
 
-void print_list() {
+void print_queue() {
 	item_t * current = queue.head;
 
 	while (current != NULL) {

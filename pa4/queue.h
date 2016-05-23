@@ -22,6 +22,6 @@ int delete_item(local_id);
 
 item_t *get_head();
 
-void print_list();
+void print_queue();
 
 #endif

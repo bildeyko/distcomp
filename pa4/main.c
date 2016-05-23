@@ -187,14 +187,17 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 	fflush(fd_events);
 	printf(log_received_all_started_fmt, data->lid);
 
-	/*fprintf(fd_events, log_done_fmt, data->lid);
+
+/////
+	fprintf(fd_events, log_done_fmt, data->lid);
 	fflush(fd_events);
 	printf(log_done_fmt, data->lid);			
 
 	msg.s_header.s_type = DONE;
 	sprintf(msg.s_payload, log_done_fmt, data->lid);
 	msg.s_header.s_payload_len = strlen(msg.s_payload);
-	send_multicast(data, &msg);*/
+	send_multicast(data, &msg);
+	//
 
 	while(done_msgs) {				
 		if(receive_any(data, &resMsg) == 0) {
