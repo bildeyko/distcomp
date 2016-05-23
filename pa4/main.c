@@ -199,10 +199,14 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 	send_multicast(data, &msg);
 	//
 
-	while(done_msgs) {				
-		if(receive_any(data, &resMsg) == 0) {
+	while(done_msgs) {		
+		int rPid = receive_any(data, &resMsg);	
+		if(rPid > 0) {
 			if(resMsg.s_header.s_type == DONE)
+			{
+				printf("From %d\n", rPid);
 				done_msgs--;
+			}
 		}
 	}
 

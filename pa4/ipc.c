@@ -56,7 +56,7 @@ int receive_any(void * self, Message * msg) {
 		if(i == data->lid)
 			continue;
 		if(receive(self, i, msg) == 0)
-			return 0;
+			return i;
 	}
 
 	struct timespec tmr;
@@ -68,5 +68,5 @@ int receive_any(void * self, Message * msg) {
 		return -1;
 	}
 
-	return 1;
+	return 0;
 }
