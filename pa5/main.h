@@ -1,6 +1,14 @@
 #ifndef DISTRIBUTED_CLASS_LAB_1_H
 #define DISTRIBUTED_CLASS_LAB_1_H
 
+#include "ipc.h"
+
+enum {
+	EMPTY_STATE,
+	WAIT_STATE,
+	EXEC_STATE
+};
+
 typedef struct 
 {
 	int rdwr[2]; // 0 = read, 1 = write
@@ -15,7 +23,17 @@ typedef struct
 
 typedef struct 
 {
+	int state;
+	timestamp_t requestTime;
+	int waitProcess[MAX_PROCESS_ID];
+} rick_t;
+
+typedef struct 
+{
 	dataIO_t * data;
+	rick_t * rick;
 } cs_t;
+
+
 
 #endif

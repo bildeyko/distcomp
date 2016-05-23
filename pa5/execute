@@ -2,4 +2,4 @@
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/home/bildeyko/dev/reps/distcomp/pa4/lib32";
 
 export LD_PRELOAD="libruntime.so";
-./pa4 $@
+./pa5 $@

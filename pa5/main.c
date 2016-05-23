@@ -17,7 +17,6 @@
 #include "pa2345.h"
 #include "main.h"
 #include "banking.h"
-#include "queue.h"
 
 
 void usage();
@@ -188,6 +187,9 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 
 	dataIO_t* data = parentData;
 
+	rick_t rkdata = { EMPTY_STATE, 0, {0} };
+	cs_t csdata = { data, &rkdata };
+
 	int start_msgs = data->processes - 2;
 	int done_msgs = data->processes - 2;
 
@@ -224,18 +226,6 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 	fflush(fd_events);
 	printf(log_received_all_started_fmt, tm, data->lid);
 
-
-/////
-	/*fprintf(fd_events, log_done_fmt, tm, data->lid, childBalance);
-	fflush(fd_events);
-	printf(log_done_fmt, tm, data->lid, childBalance);			
-
-	msg.s_header.s_type = DONE;
-	sprintf(msg.s_payload, log_done_fmt, tm, data->lid, childBalance);
-	msg.s_header.s_payload_len = strlen(msg.s_payload);
-	send_multicast(data, &msg);*/
-	//
-
 	int replyCounter = 0;
 	int printIterator = 0;
 	int printMax = data->lid * 5;
@@ -255,29 +245,22 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
 				tm = get_lamport_time();
 
-				//printf("%d: lid %d: Request from %d\n", tm, data->lid, rPid);
 
-				add_item(rPid, resMsg.s_header.s_local_time);
-
-				tm = get_lamport_time();
-				msg.s_header.s_type = CS_REPLY;
-				msg.s_header.s_payload_len = 0;
-				msg.s_header.s_local_time = tm;
-				send(data, rPid, &msg);
-
-				//print_queue(data->lid);
-			}
-
-			if(resMsg.s_header.s_type == CS_RELEASE)
-			{
-				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
-				tm = get_lamport_time();
-
-				//printf("%d: lid %d: Release from %d\n", tm, data->lid, rPid);
-
-				delete_item(rPid);
-
-
+				if(csdata.rick->state == EMPTY_STATE ||
+				  (csdata.rick->state == WAIT_STATE && 
+				  (csdata.rick->requestTime >= resMsg.s_header.s_local_time &&
+					rPid < data->lid)))
+				{	
+					tm = get_lamport_time();
+					msg.s_header.s_type = CS_REPLY;
+					msg.s_header.s_payload_len = 0;
+					msg.s_header.s_local_time = tm;
+					send(data, rPid, &msg);
+				} 
+				else 
+				{
+					csdata.rick->waitProcess[rPid] = 1;
+				}			
 			}
 
 			if(resMsg.s_header.s_type == CS_REPLY)
@@ -286,39 +269,26 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 				tm = get_lamport_time();
 
 				replyCounter ++;
-
-				//printf("%d: lid %d: Reply from %d counter %d out of %d\n", tm, data->lid, rPid, replyCounter, data->processes - 2);
-				//print_queue();
 			}
 		}
 
 		if(mutexfl == 1){
-			cs_t csdata;
-			csdata.data = data;
-
+			
 			if(printIterator < printMax)
 				request_cs(&csdata);
-
-			item_t *head = get_head();
-			if(head != NULL)
+			
+			if(replyCounter == data->processes - 2)
 			{
-				if(replyCounter == data->processes - 2 && head->pid == data->lid)
-				{
-					//print_queue(data->lid);
-					char str[MAX_PAYLOAD_LEN];
-					sprintf(str, log_loop_operation_fmt, data->lid, printIterator+1, printMax);
-					print(str);
+				csdata.rick->state = EXEC_STATE;
+				char str[MAX_PAYLOAD_LEN];
+				sprintf(str, log_loop_operation_fmt, data->lid, printIterator+1, printMax);
+				print(str);
 
-					//printf("lid %d loop\n", data->lid);
+				printIterator++;
 
-					printIterator++;
-
-					release_cs(&csdata);
-					replyCounter = 0;
-
-					
-				}
-			} 			
+				release_cs(&csdata);
+				replyCounter = 0;				
+			}			
 		} else {
 			if(printIterator < printMax)
 			{
@@ -352,14 +322,11 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 	exit(0); 
 }
 
-int requested = 0;
-
 int request_cs(const void * self)
 {
-	if(requested == 0) {
-		//printf("Req\n");
-		Message msg;
-		const cs_t* csdata = self;
+	const cs_t* csdata = self;
+	if(csdata->rick->state == EMPTY_STATE) {
+		Message msg;		
 
 		timestamp_t tm = get_lamport_time();
 		msg.s_header.s_type = CS_REQUEST;
@@ -367,9 +334,9 @@ int request_cs(const void * self)
 		msg.s_header.s_local_time = tm;
 		send_multicast(csdata->data, &msg);
 
-		add_item(csdata->data->lid, tm);
+		csdata->rick->state = WAIT_STATE;
+		csdata->rick->requestTime = tm;
 
-		requested = 1;
 		return 1;
 	} else 
 		return 2;
@@ -377,20 +344,24 @@ int request_cs(const void * self)
 
 int release_cs(const void * self)
 {
-	if(requested == 1) {
-		//printf("Rel\n");
-		Message msg;
-		const cs_t* csdata = self;
-
+	const cs_t* csdata = self;
+	if(csdata->rick->state == EXEC_STATE) {
 		timestamp_t tm = get_lamport_time();
-		msg.s_header.s_type = CS_RELEASE;
-		msg.s_header.s_payload_len = 0;
-		msg.s_header.s_local_time = tm;
-		send_multicast(csdata->data, &msg);
 
-		delete_item(csdata->data->lid);
+		for(int i=0; i<csdata->data->processes; i++)
+		{
+			if(csdata->rick->waitProcess[i] == 1)
+			{
+				Message msg;		
+				msg.s_header.s_type = CS_REPLY;
+				msg.s_header.s_payload_len = 0;
+				msg.s_header.s_local_time = tm;
+				send(csdata->data, i, &msg);
 
-		requested = 0;
+				csdata->rick->waitProcess[i] = 0;
+			}
+		}
+		csdata->rick->state = EMPTY_STATE;
 		return 1;
 	} else 
 		return 2;
@@ -421,6 +392,6 @@ int closeUnusedPipes(void * self)
 
 void usage()
 {
-	printf("usage: pa4 -p num --mutexl\n");
+	printf("usage: pa5 -p num --mutexl\n");
 	exit(1);
 }
