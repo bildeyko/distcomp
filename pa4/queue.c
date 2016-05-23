@@ -6,7 +6,6 @@ queue_t queue = {0, NULL};
 
 void add_item(local_id pid, timestamp_t times)
 {
-	//printf("lid %d add time %d\n", pid, times);
 	item_t *newItem;
 	newItem = malloc(sizeof(item_t));
     newItem->pid = pid;
@@ -53,9 +52,6 @@ void add_item(local_id pid, timestamp_t times)
 		}
 
 		if(current->next != NULL){
-			//newItem->next = current;
-			//prevItem->next = newItem;
-
 			if(current->times == times)
 			{
 				if(current->pid < pid) {

@@ -224,18 +224,6 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 	fflush(fd_events);
 	printf(log_received_all_started_fmt, tm, data->lid);
 
-
-/////
-	/*fprintf(fd_events, log_done_fmt, tm, data->lid, childBalance);
-	fflush(fd_events);
-	printf(log_done_fmt, tm, data->lid, childBalance);			
-
-	msg.s_header.s_type = DONE;
-	sprintf(msg.s_payload, log_done_fmt, tm, data->lid, childBalance);
-	msg.s_header.s_payload_len = strlen(msg.s_payload);
-	send_multicast(data, &msg);*/
-	//
-
 	int replyCounter = 0;
 	int printIterator = 0;
 	int printMax = data->lid * 5;
@@ -255,8 +243,6 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
 				tm = get_lamport_time();
 
-				//printf("%d: lid %d: Request from %d\n", tm, data->lid, rPid);
-
 				add_item(rPid, resMsg.s_header.s_local_time);
 
 				tm = get_lamport_time();
@@ -264,8 +250,6 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 				msg.s_header.s_payload_len = 0;
 				msg.s_header.s_local_time = tm;
 				send(data, rPid, &msg);
-
-				//print_queue(data->lid);
 			}
 
 			if(resMsg.s_header.s_type == CS_RELEASE)
@@ -273,11 +257,7 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
 				tm = get_lamport_time();
 
-				//printf("%d: lid %d: Release from %d\n", tm, data->lid, rPid);
-
 				delete_item(rPid);
-
-
 			}
 
 			if(resMsg.s_header.s_type == CS_REPLY)
@@ -286,9 +266,6 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 				tm = get_lamport_time();
 
 				replyCounter ++;
-
-				//printf("%d: lid %d: Reply from %d counter %d out of %d\n", tm, data->lid, rPid, replyCounter, data->processes - 2);
-				//print_queue();
 			}
 		}
 
@@ -304,12 +281,9 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mu
 			{
 				if(replyCounter == data->processes - 2 && head->pid == data->lid)
 				{
-					//print_queue(data->lid);
 					char str[MAX_PAYLOAD_LEN];
 					sprintf(str, log_loop_operation_fmt, data->lid, printIterator+1, printMax);
 					print(str);
-
-					//printf("lid %d loop\n", data->lid);
 
 					printIterator++;
 
@@ -357,7 +331,6 @@ int requested = 0;
 int request_cs(const void * self)
 {
 	if(requested == 0) {
-		//printf("Req\n");
 		Message msg;
 		const cs_t* csdata = self;
 
@@ -378,7 +351,6 @@ int request_cs(const void * self)
 int release_cs(const void * self)
 {
 	if(requested == 1) {
-		//printf("Rel\n");
 		Message msg;
 		const cs_t* csdata = self;
 
