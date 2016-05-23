@@ -14,7 +14,7 @@
 #include "main.h"
 
 int send(void * self, local_id dst, const Message * msg) {
-	struct dataIO_t* data = self;
+	dataIO_t* data = self;
 	uint16_t size = sizeof(msg->s_header) + msg->s_header.s_payload_len;
 
 	if(write(data->pipes[dst][data->lid].rdwr[1], msg, size) != size)
@@ -23,7 +23,7 @@ int send(void * self, local_id dst, const Message * msg) {
 }
 
 int send_multicast(void * self, const Message * msg) {
-	struct dataIO_t* data = self;
+	dataIO_t* data = self;
 
 	for(int i = 0; i < data->processes; i++) {
 		if(i == data->lid)
@@ -35,7 +35,7 @@ int send_multicast(void * self, const Message * msg) {
 }
 
 int receive(void * self, local_id from, Message * msg) {
-	struct dataIO_t* data = self;
+	dataIO_t* data = self;
 	uint16_t size = sizeof(msg->s_header);
 
 	if(read(data->pipes[data->lid][from].rdwr[0], &msg->s_header, size) != size)
@@ -50,7 +50,7 @@ int receive(void * self, local_id from, Message * msg) {
 }
 
 int receive_any(void * self, Message * msg) {
-	struct dataIO_t* data = self;
+	dataIO_t* data = self;
 
 	for(int i = 0; i < data->processes; i++) {
 		if(i == data->lid)
@@ -68,5 +68,5 @@ int receive_any(void * self, Message * msg) {
 		return -1;
 	}
 
-	return 0;
+	return -2;
 }

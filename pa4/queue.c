@@ -6,6 +6,7 @@ queue_t queue = {0, NULL};
 
 void add_item(local_id pid, timestamp_t times)
 {
+	//printf("lid %d add time %d\n", pid, times);
 	item_t *newItem;
 	newItem = malloc(sizeof(item_t));
     newItem->pid = pid;
@@ -19,31 +20,80 @@ void add_item(local_id pid, timestamp_t times)
 		item_t *current = queue.head;
 		item_t *prevItem;
 
-		if(current->times > times)
-		{
-			newItem->next = current;
-			queue.head = newItem;
+		if(queue.length == 1) {
+			if(current->times > times)
+			{
+				newItem->next = current;
+				queue.head = newItem;
+			}
+
+			if(current->times < times)
+			{
+				current->next = newItem;
+			}
+
+			if(current->times == times)
+			{
+				if(current->pid < pid){
+					newItem->next = current->next;
+					current->next = newItem;
+				}
+				else{
+					newItem->next = current;
+					queue.head = newItem;
+				}
+			}
 			queue.length ++;
 			return;
 		}
 
-		while (current->next != NULL && current->times < times) {
+		while (current->next != NULL && current->times <= times) {
 			prevItem = current;
 			current = current->next;
 		}
 
 		if(current->next != NULL){
-			newItem->next = current;
-			prevItem->next = newItem;
+			//newItem->next = current;
+			//prevItem->next = newItem;
+
+			if(current->times == times)
+			{
+				if(current->pid < pid) {
+					newItem->next = current->next;
+					current->next = newItem;
+				}
+				else{
+					newItem->next = current;
+					prevItem->next = newItem;
+				}
+			} else
+				if(current->times < times){
+					newItem->next = current->next;
+					current->next = newItem;
+				}
+				else {
+					newItem->next = current;
+					prevItem->next = newItem;
+				}
 		}
 		else
 		{
-			if(current->times < times)
-				current->next = newItem;
-			else {
-				newItem->next = current;
-				prevItem->next = newItem;
-			}
+			if(current->times == times)
+			{
+				if(current->pid < pid) {
+					current->next = newItem;
+				}
+				else{
+					newItem->next = current;
+					prevItem->next = newItem;
+				}
+			} else
+				if(current->times < times)
+					current->next = newItem;
+				else {
+					newItem->next = current;
+					prevItem->next = newItem;
+				}
 		}
 	}
 
@@ -86,11 +136,11 @@ item_t *get_head()
 	return queue.head;
 }
 
-void print_queue() {
+void print_queue(int lid) {
 	item_t * current = queue.head;
 
 	while (current != NULL) {
-		printf("(%d;%d)\n", current->times, current->pid);
+		printf("lid %d: (%d;%d)\n", lid, current->times, current->pid);
 		current = current->next;
 	}
 }

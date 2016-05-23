@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -std=c99 -Wall --pedantic
-LFLAGS = 
+LFLAGS = -Llib32 -lruntime
 TARGET = pa4
 
 all: $(TARGET)

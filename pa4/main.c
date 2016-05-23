@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <wait.h>
+#include <getopt.h>
 
 #include "ipc.h"
 #include "common.h"
@@ -21,7 +22,7 @@
 
 void usage();
 int closeUnusedPipes(void * self);
-void doChild(void *, FILE *, int, int);
+void doChild(void *, FILE *, int, int, int);
 
 static timestamp_t lamportStamp = 0;
 
@@ -41,7 +42,7 @@ timestamp_t max(timestamp_t a, timestamp_t b)
 int main(int argc, char *argv[])
 {
 	int pid;
-	struct dataIO_t data;
+	dataIO_t data;
 	int start_msgs, done_msgs;
 	FILE *fd_pipes, *fd_events;
 
@@ -50,8 +51,24 @@ int main(int argc, char *argv[])
 
 	int c;
 	opterr=0;
-	while((c = getopt(argc, argv, "p:")) != -1) {
+
+	int mutexfl = 0;
+
+    const char* short_options = "p:";
+
+    const struct option long_options[] = {
+        {"mutexl", 0, &mutexfl, 1},
+        {NULL,0,NULL,0}
+    };
+
+    while(1){
+		c = getopt_long(argc, argv, short_options, long_options, NULL);
+		if (c == -1)
+			break;
+
 		switch (c) {
+			case 0:
+				break;
 			case 'p':
 				data.processes = atoi(optarg)+1;
 				break;
@@ -59,7 +76,7 @@ int main(int argc, char *argv[])
 			default:
 				usage();
 		}
-	}	
+	}
 	
 	data.lid = 0;
 
@@ -80,8 +97,12 @@ int main(int argc, char *argv[])
 					exit(1);
 				}
 
-				int mode = fcntl(data.pipes[i][j].rdwr[0], F_GETFL);
+				int mode;
+				mode = fcntl(data.pipes[i][j].rdwr[0], F_GETFL);
 				fcntl(data.pipes[i][j].rdwr[0], F_SETFL, mode | O_NONBLOCK);
+
+				mode = fcntl(data.pipes[i][j].rdwr[1], F_GETFL);
+				fcntl(data.pipes[i][j].rdwr[1], F_SETFL, mode | O_NONBLOCK);
 
 				fprintf(fd_pipes, "The pipe %d ===> %d was created\n", j, i);
 			}
@@ -107,39 +128,50 @@ int main(int argc, char *argv[])
 			exit(1);
 		} else if (pid == 0) {
 
-			doChild(&data, fd_events, i, 0);
+			doChild(&data, fd_events, i, 0, mutexfl);
 			exit(0);			
 		}
 	}
 
 	closeUnusedPipes(&data);
 
+	timestamp_t tm = get_lamport_time();
 	start_msgs = data.processes - 1;
 	done_msgs = data.processes - 1;
 
 	while(start_msgs) {				
-		if(receive_any(&data, &resMsg) == 0) {
+		if(receive_any(&data, &resMsg) > -1) {
 			if(resMsg.s_header.s_type == STARTED)
+			{
 				start_msgs--;
-			if(resMsg.s_header.s_type == DONE)
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+			}
+			if(resMsg.s_header.s_type == DONE) {
 				done_msgs--;
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+			}
 		}
 	}
 
-	fprintf(fd_events, log_received_all_started_fmt, data.lid);
+	fprintf(fd_events, log_received_all_started_fmt, tm, data.lid);
 	fflush(fd_events);
-	printf(log_received_all_started_fmt, data.lid);
+	printf(log_received_all_started_fmt, tm, data.lid);
 
 	while(done_msgs) {				
-		if(receive_any(&data, &resMsg) == 0) {
-			if(resMsg.s_header.s_type == DONE)
+		if(receive_any(&data, &resMsg) > -1) {
+			if(resMsg.s_header.s_type == DONE){
 				done_msgs--;
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+			}
 		}
 	}
 
-	fprintf(fd_events, log_received_all_done_fmt, data.lid);
+	fprintf(fd_events, log_received_all_done_fmt, tm, data.lid);
 	fflush(fd_events);
-	printf(log_received_all_done_fmt, data.lid);		
+	printf(log_received_all_done_fmt, tm, data.lid);		
 
 	fclose(fd_events);
 
@@ -150,14 +182,16 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
+void doChild(void *parentData, FILE *fd_events, int lid, int initBalance, int mutexfl)
 {
 	Message msg, resMsg;
 
-	struct dataIO_t* data = parentData;
+	dataIO_t* data = parentData;
 
 	int start_msgs = data->processes - 2;
 	int done_msgs = data->processes - 2;
+
+	timestamp_t tm = lamportStamp;
 
 	data->lid = lid;
 
@@ -165,17 +199,20 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 
 	balance_t childBalance = initBalance;
 
-	fprintf(fd_events, log_started_fmt, data->lid, getpid(), getppid());
+	fprintf(fd_events, log_started_fmt, tm, data->lid, getpid(), getppid(), childBalance);
 	fflush(fd_events);
-	printf(log_started_fmt, data->lid, getpid(), getppid());
-	
+	printf(log_started_fmt, tm, data->lid, getpid(), getppid(),childBalance);
+
+	tm = get_lamport_time();
 	msg.s_header.s_type = STARTED;
-	sprintf(msg.s_payload, log_started_fmt, data->lid, getpid(), getppid());
+	msg.s_header.s_magic = MESSAGE_MAGIC;
+	sprintf(msg.s_payload, log_started_fmt, tm, data->lid, getpid(), getppid(), childBalance);
 	msg.s_header.s_payload_len = strlen(msg.s_payload);
+	msg.s_header.s_local_time = tm;
 	send_multicast(data, &msg);
 
 	while(start_msgs) {				
-		if(receive_any(data, &resMsg) == 0) {
+		if(receive_any(data, &resMsg) > -1) {
 			if(resMsg.s_header.s_type == STARTED)
 				start_msgs--;
 			if(resMsg.s_header.s_type == DONE)
@@ -183,44 +220,185 @@ void doChild(void *parentData, FILE *fd_events, int lid, int initBalance)
 		}
 	}
 
-	fprintf(fd_events, log_received_all_started_fmt, data->lid);
+	fprintf(fd_events, log_received_all_started_fmt, tm, data->lid);
 	fflush(fd_events);
-	printf(log_received_all_started_fmt, data->lid);
+	printf(log_received_all_started_fmt, tm, data->lid);
 
 
 /////
-	fprintf(fd_events, log_done_fmt, data->lid);
+	/*fprintf(fd_events, log_done_fmt, tm, data->lid, childBalance);
 	fflush(fd_events);
-	printf(log_done_fmt, data->lid);			
+	printf(log_done_fmt, tm, data->lid, childBalance);			
 
 	msg.s_header.s_type = DONE;
-	sprintf(msg.s_payload, log_done_fmt, data->lid);
+	sprintf(msg.s_payload, log_done_fmt, tm, data->lid, childBalance);
 	msg.s_header.s_payload_len = strlen(msg.s_payload);
-	send_multicast(data, &msg);
+	send_multicast(data, &msg);*/
 	//
 
-	while(done_msgs) {		
+	int replyCounter = 0;
+	int printIterator = 0;
+	int printMax = data->lid * 5;
+	while(done_msgs || printIterator < printMax) {		
 		int rPid = receive_any(data, &resMsg);	
-		if(rPid > 0) {
+		if(rPid > -1) {
 			if(resMsg.s_header.s_type == DONE)
 			{
-				printf("From %d\n", rPid);
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+
 				done_msgs--;
 			}
+
+			if(resMsg.s_header.s_type == CS_REQUEST)
+			{
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+
+				//printf("%d: lid %d: Request from %d\n", tm, data->lid, rPid);
+
+				add_item(rPid, resMsg.s_header.s_local_time);
+
+				tm = get_lamport_time();
+				msg.s_header.s_type = CS_REPLY;
+				msg.s_header.s_payload_len = 0;
+				msg.s_header.s_local_time = tm;
+				send(data, rPid, &msg);
+
+				//print_queue(data->lid);
+			}
+
+			if(resMsg.s_header.s_type == CS_RELEASE)
+			{
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+
+				//printf("%d: lid %d: Release from %d\n", tm, data->lid, rPid);
+
+				delete_item(rPid);
+
+
+			}
+
+			if(resMsg.s_header.s_type == CS_REPLY)
+			{
+				lamportStamp = max(lamportStamp, resMsg.s_header.s_local_time);
+				tm = get_lamport_time();
+
+				replyCounter ++;
+
+				//printf("%d: lid %d: Reply from %d counter %d out of %d\n", tm, data->lid, rPid, replyCounter, data->processes - 2);
+				//print_queue();
+			}
+		}
+
+		if(mutexfl == 1){
+			cs_t csdata;
+			csdata.data = data;
+
+			if(printIterator < printMax)
+				request_cs(&csdata);
+
+			item_t *head = get_head();
+			if(head != NULL)
+			{
+				if(replyCounter == data->processes - 2 && head->pid == data->lid)
+				{
+					//print_queue(data->lid);
+					char str[MAX_PAYLOAD_LEN];
+					sprintf(str, log_loop_operation_fmt, data->lid, printIterator+1, printMax);
+					print(str);
+
+					//printf("lid %d loop\n", data->lid);
+
+					printIterator++;
+
+					release_cs(&csdata);
+					replyCounter = 0;
+
+					
+				}
+			} 			
+		} else {
+			if(printIterator < printMax)
+			{
+				char str[MAX_PAYLOAD_LEN];
+				sprintf(str, log_loop_operation_fmt, data->lid, printIterator+1, printMax);
+				print(str);
+				printIterator++;
+			}
+		}
+
+		if(printIterator == printMax)
+		{
+			fprintf(fd_events, log_done_fmt, tm, data->lid, childBalance);
+			fflush(fd_events);
+			printf(log_done_fmt, tm, data->lid, childBalance);			
+
+			msg.s_header.s_type = DONE;
+			sprintf(msg.s_payload, log_done_fmt, tm, data->lid, childBalance);
+			msg.s_header.s_payload_len = strlen(msg.s_payload);
+			send_multicast(data, &msg);
+
+			printIterator ++;
 		}
 	}
 
-	fprintf(fd_events, log_received_all_done_fmt, data->lid);
+	fprintf(fd_events, log_received_all_done_fmt, tm, data->lid);
 	fflush(fd_events);
-	printf(log_received_all_done_fmt, data->lid);
+	printf(log_received_all_done_fmt, tm, data->lid);
 
 	fclose(fd_events);
 	exit(0); 
 }
 
+int requested = 0;
+
+int request_cs(const void * self)
+{
+	if(requested == 0) {
+		//printf("Req\n");
+		Message msg;
+		const cs_t* csdata = self;
+
+		timestamp_t tm = get_lamport_time();
+		msg.s_header.s_type = CS_REQUEST;
+		msg.s_header.s_payload_len = 0;
+		msg.s_header.s_local_time = tm;
+		send_multicast(csdata->data, &msg);
+
+		add_item(csdata->data->lid, tm);
+
+		requested = 1;
+		return 1;
+	} else 
+		return 2;
+}
+
+int release_cs(const void * self)
+{
+	if(requested == 1) {
+		//printf("Rel\n");
+		Message msg;
+		const cs_t* csdata = self;
+
+		timestamp_t tm = get_lamport_time();
+		msg.s_header.s_type = CS_RELEASE;
+		msg.s_header.s_payload_len = 0;
+		msg.s_header.s_local_time = tm;
+		send_multicast(csdata->data, &msg);
+
+		delete_item(csdata->data->lid);
+
+		requested = 0;
+		return 1;
+	} else 
+		return 2;
+}
+
 int closeUnusedPipes(void * self)
 {
-	struct dataIO_t* data = self;
+	dataIO_t* data = self;
 	for(int i = 0; i < data->processes; i++) {
 
 		for(int j = 0; j < data->processes; j++) {	
@@ -243,6 +421,6 @@ int closeUnusedPipes(void * self)
 
 void usage()
 {
-	printf("usage: pa4 -p num\n");
+	printf("usage: pa4 -p num --mutexl\n");
 	exit(1);
 }

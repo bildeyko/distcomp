@@ -1,16 +1,21 @@
 #ifndef DISTRIBUTED_CLASS_LAB_1_H
 #define DISTRIBUTED_CLASS_LAB_1_H
 
-struct pipes_t
+typedef struct 
 {
 	int rdwr[2]; // 0 = read, 1 = write
-};
+} pipes_t;
 
-struct dataIO_t
+typedef struct
 {
 	int processes;
 	int8_t lid;
-	struct pipes_t pipes[MAX_PROCESS_ID][MAX_PROCESS_ID];
-};
+	pipes_t pipes[MAX_PROCESS_ID][MAX_PROCESS_ID];
+} dataIO_t;
+
+typedef struct 
+{
+	dataIO_t * data;
+} cs_t;
 
 #endif
